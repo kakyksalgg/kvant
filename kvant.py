@@ -81,23 +81,23 @@ class Reader:
 
     def take(self, n: int) -> bytes:
         """Вернуть следующие n байтов и сдвинуть курсор. Если байтов не хватает — LoadError."""
-        # TODO 1.1  Подсказка: срез  self.data[self.pos : self.pos + n]
-        raise NotImplementedError('Глава 1: Reader.take')
+        if len(self.data) - self.pos < n:
+            raise LoadError('Файлити закончился.')
+        chunk = self.data[self.pos : self.pos + n]
+        self.pos += n
+        return chunk
 
     def u8(self) -> int:
         """1 байт без знака (0…255)."""
-        # TODO 1.1
-        raise NotImplementedError('Глава 1: Reader.u8')
+        return int.from_bytes(self.take(1), 'big')
 
     def u16(self) -> int:
         """2 байта без знака, big-endian."""
-        # TODO 1.1  Подсказка: int.from_bytes(..., 'big')
-        raise NotImplementedError('Глава 1: Reader.u16')
+        return int.from_bytes(self.take(2), 'big')
 
     def u32(self) -> int:
         """4 байта без знака, big-endian."""
-        # TODO 1.1
-        raise NotImplementedError('Глава 1: Reader.u32')
+        return int.from_bytes(self.take(4), 'big')
 
 
 def load(data: bytes) -> Cartridge:
