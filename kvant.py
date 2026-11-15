@@ -106,9 +106,30 @@ def load(data: bytes) -> Cartridge:
     Проверить: длину, сигнатуру KVNT, SHA-256 (последние 32 байта файла).
     При любой проблеме — raise LoadError('понятное сообщение').
     """
-    # TODO 1.2  Порядок полей: сигнатура, версия, владелец, тип, куча,
-    #           глобальные, точка входа, пул строк, код, контрольная сумма.
-    raise NotImplementedError('Глава 1: load')
+    body, digest = data[:-32], data[-32:]
+
+    if len(data) < 32 or body[:4] != MAGIC:
+        raise LoadError('Неверный формат файлити, сигнатура не найдена!!!!!')
+
+    if hashlib.sha256(body).digest() != digest:
+        raise LoadError('Неверная контрольная сумма!!!!!!')
+
+    r = Reader(body)
+    r.take(4)                               
+    version = (r.u8(), r.u8())             
+    owner = r.take(r.u8()).decode('utf-8')     
+    kind = r.u8()                             
+    heap = r.u16()                            
+    nglobals = r.u8()                 
+    entry = r.u16()                            
+    consts = [r.take(r.u16()).decode('utf-8') for _ in range(r.u16())] 
+    code = r.take(r.u32())                      
+
+    if r.pos != len(body):
+        raise LoadError('В файлити есть лишние байты')
+
+    return Cartridge(owner=owner, kind=kind, heap=heap, nglobals=nglobals,
+                     entry=entry, consts=consts, code=code, version=version)
 
 
 # ════════════════════════════════════════════════════════════════════════
