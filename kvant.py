@@ -191,8 +191,51 @@ def disassemble(cart: Cartridge) -> str:
     Метки L_XXXX — у адресов, на которые ведут переходы/вызовы, и у точки входа.
     Неизвестный байт печатается как  ??      0x40  и разбор идёт дальше со следующего байта.
     """
-    # TODO 2.2  Сделайте два прохода: сначала соберите адреса меток, потом печатайте.
-    raise NotImplementedError('Глава 2: disassemble')
+    code = cart.code
+    forms = {name: form for name, form in OPCODES.values()}
+
+    jumps = {cart.entry}
+    pos = 0
+    while pos < len(code):
+        cmd = decode(code, pos)
+        if cmd is None:
+            pos += 1
+        else:
+            name, args, nxt = cmd
+            for t, v in zip(forms[name], args):
+                if t == 'a':
+                    jumps.add(v)
+            pos = nxt
+
+    res = []
+    pos = 0
+    while pos < len(code):
+        if pos in jumps:
+            jump = f'L_{pos:04X}:'
+            if pos == cart.entry:
+                jump += '    ; точка входа'
+            res.append(jump)
+
+        cmd = decode(code, pos)
+        if cmd is None:
+            res.append(f'  {pos:04X}  {"??":<8}0x{code[pos]:02X}')
+            pos += 1
+        else:
+            name, args, nxt = cmd
+            r = []
+            for t, v in zip(forms[name], args):
+                if t == 'a':
+                    r.append(f'L_{v:04X}')
+                else:
+                    r.append(str(v))
+            ops = ', '.join(r)
+            rw = f'  {pos:04X}  {name:<8}{ops}'
+            if name == 'PRINTS':
+                rw += f'    ; {cart.consts[args[0]]!r}'
+            res.append(rw)
+            pos = nxt
+
+    return '\n'.join(res)
 
 
 # ════════════════════════════════════════════════════════════════════════
