@@ -82,7 +82,7 @@ class Reader:
     def take(self, n: int) -> bytes:
         """Вернуть следующие n байтов и сдвинуть курсор. Если байтов не хватает — LoadError."""
         if len(self.data) - self.pos < n:
-            raise LoadError('Файлити закончился.')
+            raise LoadError('Файл закончился!')
         chunk = self.data[self.pos : self.pos + n]
         self.pos += n
         return chunk
@@ -109,7 +109,7 @@ def load(data: bytes) -> Cartridge:
     body, digest = data[:-32], data[-32:]
 
     if len(data) < 32 or body[:4] != MAGIC:
-        raise LoadError('Неверный формат файлити, сигнатура не найдена!!!!!')
+        raise LoadError('Неверный формат файла, сигнатура не найдена!!!!!')
 
     if hashlib.sha256(body).digest() != digest:
         raise LoadError('Неверная контрольная сумма!!!!!!')
@@ -126,7 +126,7 @@ def load(data: bytes) -> Cartridge:
     code = r.take(r.u32())                      
 
     if r.pos != len(body):
-        raise LoadError('В файлити есть лишние байты')
+        raise LoadError('В файле есть лишние байты.')
 
     return Cartridge(owner=owner, kind=kind, heap=heap, nglobals=nglobals,
                      entry=entry, consts=consts, code=code, version=version)
@@ -168,8 +168,16 @@ def decode(code: bytes, pc: int):
     decode(bytes([0x01, 0, 0, 0, 42]), 0)  ->  ('PUSH', [42], 5)
     decode(bytes([0x2B, 0, 8, 1]), 0)      ->  ('CALL', [8, 1], 4)
     """
-    # TODO 2.1  Не забудьте: i32 — со знаком (int.from_bytes(..., 'big', signed=True)).
-    raise NotImplementedError('Глава 2: decode')
+    if code[pc] not in OPCODES:
+        return None
+    name, form = OPCODES[code[pc]]
+    p = pc + 1
+    args = []
+    for t in form:
+        size = OPERAND_SIZE[t]
+        args.append(int.from_bytes(code[p:p + size], 'big', signed=(t == 'i')))
+        p += size
+    return name, args, p
 
 
 def disassemble(cart: Cartridge) -> str:
