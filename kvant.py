@@ -258,7 +258,7 @@ def wrap32(x: int) -> int:
 def java_div(a: int, b: int) -> int:
     """Частное, округлённое К НУЛЮ:  java_div(-7, 2) -> -3   (а -7 // 2 в Python = -4!)."""
     if b == 0:
-        raise VMError('Деление на ноль')
+        raise VMError('деление на ноль')
     q = abs(a) // abs(b)
     if (a < 0) != (b < 0):
         q = -q 
@@ -456,20 +456,20 @@ class VM:
     def push(self, v):
         """Положить значение на стек. Больше STACK_LIMIT — VMError('переполнение стека')."""
         if len(self.stack) >= 1024:
-                    raise VMError('Случилось переполнение стека!!!')
+                    raise VMError('переполнение стека')
         self.stack.append(v)
 
     def pop(self):
         """Снять значение. Если стек не выше дна текущего кадра — VMError('стек пуст')."""
         if len(self.stack) <= self.frame.base:
-                    raise VMError('Стек пустой!!!')
+                    raise VMError('стек пуст')
         return self.stack.pop()
 
     def pop_int(self) -> int:
         """Снять ЧИСЛО. Если там ссылка — VMError('ожидалось число')."""
         v = self.pop()
         if not isinstance(v, int):
-            raise VMError('Не число!')
+            raise VMError('ожидалось число')
         return v
 
     def pop_ref(self) -> HeapObject:
