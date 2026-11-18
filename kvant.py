@@ -247,20 +247,28 @@ def wrap32(x: int) -> int:
 
     wrap32(2**31) -> -2147483648      wrap32(65536 * 65536) -> 0
     """
-    # TODO 3.1  Подсказка: x & 0xFFFFFFFF, а потом разберитесь со знаком.
-    raise NotImplementedError('Глава 3: wrap32')
+    x = x & 0xFFFFFFFF
+    
+    if x >= 0x80000000:  #0x80000000 = 2^31 = 2147483648
+        x -= 0x100000000  #0x100000000 = 2^32 = 4294967296
+    
+    return x
 
 
 def java_div(a: int, b: int) -> int:
     """Частное, округлённое К НУЛЮ:  java_div(-7, 2) -> -3   (а -7 // 2 в Python = -4!)."""
-    # TODO 3.2  b == 0 -> raise VMError('деление на ноль')
-    raise NotImplementedError('Глава 3: java_div')
+    if b == 0:
+        raise VMError('Деление на ноль')
+    q = abs(a) // abs(b)
+    if (a < 0) != (b < 0):
+        q = -q 
+    return wrap32(q)
 
 
 def java_mod(a: int, b: int) -> int:
     """Остаток со знаком делимого:  a - b * java_div(a, b).   java_mod(-7, 2) -> -1."""
-    # TODO 3.2
-    raise NotImplementedError('Глава 3: java_mod')
+    q = a - b * java_div(a, b)
+    return wrap32(q)
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -295,6 +303,20 @@ class HeapObject:
 
     def __repr__(self):
         return f'<объект[{len(self.items)}]{"" if self.alive else " освобождён"}>'
+    
+    def push(self, v):
+        if len(self.stack) >= 1024:
+            raise VMError('Случилось переполнение стека!!!')
+        self.stack.append(v)
+    def pop(self):
+        if len(self.stack) <= self.frame.base:
+            raise VMError('Стек пустой!!!')
+        return self.stack.pop()
+    def pop_int(self):
+        v = self.pop()
+        if not isinstance(v, int):
+            raise VMError('Не число!')
+        return v
 
 
 class Heap:
