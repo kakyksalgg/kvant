@@ -303,20 +303,6 @@ class HeapObject:
 
     def __repr__(self):
         return f'<объект[{len(self.items)}]{"" if self.alive else " освобождён"}>'
-    
-    def push(self, v):
-        if len(self.stack) >= 1024:
-            raise VMError('Случилось переполнение стека!!!')
-        self.stack.append(v)
-    def pop(self):
-        if len(self.stack) <= self.frame.base:
-            raise VMError('Стек пустой!!!')
-        return self.stack.pop()
-    def pop_int(self):
-        v = self.pop()
-        if not isinstance(v, int):
-            raise VMError('Не число!')
-        return v
 
 
 class Heap:
@@ -469,18 +455,22 @@ class VM:
     # ── ГЛАВА 3: стек ───────────────────────────────────────────────────
     def push(self, v):
         """Положить значение на стек. Больше STACK_LIMIT — VMError('переполнение стека')."""
-        # TODO 3.3
-        raise NotImplementedError('Глава 3: VM.push')
+        if len(self.stack) >= 1024:
+                    raise VMError('Случилось переполнение стека!!!')
+        self.stack.append(v)
 
     def pop(self):
         """Снять значение. Если стек не выше дна текущего кадра — VMError('стек пуст')."""
-        # TODO 3.3  Дно — self.frame.base
-        raise NotImplementedError('Глава 3: VM.pop')
+        if len(self.stack) <= self.frame.base:
+                    raise VMError('Стек пустой!!!')
+        return self.stack.pop()
 
     def pop_int(self) -> int:
         """Снять ЧИСЛО. Если там ссылка — VMError('ожидалось число')."""
-        # TODO 3.3
-        raise NotImplementedError('Глава 3: VM.pop_int')
+        v = self.pop()
+        if not isinstance(v, int):
+            raise VMError('Не число!')
+        return v
 
     def pop_ref(self) -> HeapObject:
         """Снять ССЫЛКУ на живой объект. Число — 'ожидалась ссылка';
@@ -501,8 +491,21 @@ class VM:
         4. Если обработчик бросил VMError(msg), перебросить
            VMError(f'pc={pc:04X} {мнемоника}: {msg}') — чтобы было видно, где упало.
         """
-        # TODO 3.4
-        raise NotImplementedError('Глава 3: VM.step')
+        pc = self.pc
+        res = decode(self.code, pc)
+    
+        if res is None or res[0] not in self.handlers:
+            raise VMError(f'pc={pc:04X}: неизвестная команда 0x{self.code[pc]:02X}')
+    
+        name, args, nextPc = res
+        self.steps += 1
+        self.pc = nextPc
+    
+        handler = self.handlers[name]
+        try:
+            handler(args)         
+        except VMError as e:
+            raise VMError(f'pc={pc:04X} {name}: {e}') from None
 
     # ── обработчики команд ──────────────────────────────────────────────
     # Каждый получает список операндов args (может быть пустым).
@@ -528,10 +531,35 @@ class VM:
     #
     # Пример для разгона:
     #
-    #   def op_add(self, args):
-    #       b = self.pop_int()          # вершина — второй операнд!
-    #       a = self.pop_int()
-    #       self.push(wrap32(a + b))
+    def _binary(self, f):
+        """Вспомогательный метод для бинарных операций."""
+        b = self.pop_int()
+        a = self.pop_int()
+        self.push(wrap32(f(a, b)))
+
+    def op_add(self, args):
+        self._binary(lambda a, b: a + b)
+
+    def op_sub(self, args):
+        self._binary(lambda a, b: a - b)
+
+    def op_mul(self, args):
+        self._binary(lambda a, b: a * b)
+
+    def op_div(self, args):
+        self._binary(java_div)
+
+    def op_mod(self, args):
+        self._binary(java_mod)
+
+    def op_lt(self, args):
+        self._binary(lambda a, b: 1 if a < b else 0)
+
+    def op_gt(self, args):
+        self._binary(lambda a, b: 1 if a > b else 0)
+
+    def op_eq(self, args):
+        self._binary(lambda a, b: 1 if a == b else 0)
 
     # ── ГЛАВА 6: корни ──────────────────────────────────────────────────
     def roots(self):
