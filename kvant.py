@@ -531,6 +531,20 @@ class VM:
     #
     # Пример для разгона:
     #
+    def op_pop(self, args):
+            self.pop()
+    
+    def op_dup(self, args):
+        v = self.pop()
+        self.push(v)
+        self.push(v)
+    
+    def op_swap(self, args):
+        b = self.pop()
+        a = self.pop()
+        self.push(b)
+        self.push(a)
+
     def _binary(self, f):
         """Вспомогательный метод для бинарных операций."""
         b = self.pop_int()
@@ -560,6 +574,43 @@ class VM:
 
     def op_eq(self, args):
         self._binary(lambda a, b: 1 if a == b else 0)
+
+    def op_neg(self, args):
+        a = self.pop_int()
+        self.push(wrap32(-a))
+        
+    def op_not(self, args):
+        a = self.pop_int()
+        if a == 0:
+            self.push(1)
+        else:
+            self.push(0)
+
+    def op_load(self, args):
+        i = args[0]
+        if i > 15:
+            raise VMError(f'локальной {i} не существует')
+        self.push(self.frame.locals[i])
+
+    def op_store(self, args):
+        i = args[0]
+        if i > 15:
+            raise VMError(f'локальной {i} не существует')
+        v = self.pop()
+        self.frame.locals[i] = v
+
+    def op_gload(self, args):
+        i = args[0]
+        if i >= len(self.globals):  
+            raise VMError(f'глобальной {i} не существует')
+        self.push(self.globals[i])
+
+    def op_store(self, args):
+        i = args[0]
+        if i >= len(self.globals):
+            raise VMError(f'глобальной {i} не существует')
+        v = self.pop()
+        self.globals[i] = v
 
     # ── ГЛАВА 6: корни ──────────────────────────────────────────────────
     def roots(self):
