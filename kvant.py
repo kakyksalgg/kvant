@@ -325,12 +325,18 @@ class Heap:
         vm передаётся, чтобы сборщик мог спросить у машины корни (vm.roots())
         и номер текущей команды (vm.steps) для графика.
         """
-        # TODO 4.3  Проверить n (число, 1…4096), создать HeapObject, обновить
-        #           used / peak / allocated, добавить в self.objects,
-        #           записать в self.log (vm.steps, self.used, 'alloc').
-        # TODO 6.3  Перед созданием: если не no_limit и used + (n+1) > capacity —
+        if not (1 <= n <= 4096):
+            raise VMError('недопустимый размер массива')
+        v = HeapObject(n, fill)
+        self.objects.append(v)
+        self.used += n + 1
+        self.allocated += 1
+        if self.used > self.peak:
+            self.peak = self.used
+        self.log.append((vm.steps, self.used, 'alloc'))
+        return v
+        # TODO 6.3  Перед создание м: если не no_limit и used + (n+1) > capacity —
         #           self.collect(vm); если места всё равно нет — VMError('OUT OF MEMORY').
-        raise NotImplementedError('Глава 4: Heap.alloc')
 
     def collect(self, vm):
         """Сборка мусора «пометка и очистка» (mark & sweep). Глава 6."""
@@ -573,7 +579,21 @@ class VM:
         self._binary(lambda a, b: 1 if a > b else 0)
 
     def op_eq(self, args):
-        self._binary(lambda a, b: 1 if a == b else 0)
+        b = self.pop()
+        a = self.pop()
+        if isinstance(b, int) and isinstance(a, int):
+            if b == a:
+                r = 1
+            else:
+                r = 0
+        elif isinstance(b, HeapObject) and isinstance(a, HeapObject):
+            if b is a:
+                r = 1
+            else:
+                r = 0
+        else:
+            r = 0
+        self.push(r)
 
     def op_neg(self, args):
         a = self.pop_int()
@@ -616,14 +636,20 @@ class VM:
         self.pc = args[0]
 
     def op_jz(self, args):
-        v = self.pop_int()
-        if v == 0:
-            self.pc = args[0]
+        v = self.pop() 
+        addr = args[0]
+        if isinstance(v, int):
+            if v == 0:
+                self.pc = addr
 
     def op_jnz(self, args):
-        v = self.pop_int()
-        if v != 0:
-            self.pc = args[0]
+        v = self.pop()
+        addr = args[0]
+        if isinstance(v, int):
+            if v != 0:
+                self.pc = addr
+        elif isinstance(v, HeapObject):
+            self.pc = addr
 
     def op_halt(self, args):
         self.halted = True 
@@ -644,6 +670,85 @@ class VM:
         if v == 0:
             k = args[0]
             raise VMError(f'ASSERT {k}: тест не пройден')
+        
+    def op_call(self, args):
+        # args[0] - адрес функции, args[1] - количество аргументов
+        addr = args[0]
+        n = args[1]
+        values = [self.pop() for _ in range(n)]
+        values.reverse()
+        if len(self.frames) >= 256:
+            raise VMError('слишком глубокая рекурсия')
+        f = Frame(ret=self.pc, base=len(self.stack))
+        for i in range(n):
+            f.locals[i] = values[i]
+        self.frames.append(f)
+        self.pc = addr
+    
+    def op_ret(self, args):
+        if len(self.frames) == 1:
+            raise VMError('RET из главной программы')
+        f = self.frames[-1]
+        v = self.pop()
+        del self.stack[f.base:]
+        self.frames.pop()
+        self.pc = f.ret
+        self.push(v)
+    
+    def pop_ref(self) -> HeapObject:
+        v = self.pop()
+        if not isinstance(v, HeapObject):
+            raise VMError('ожидалась ссылка')
+        return v
+
+    def op_new(self, args):
+        n = self.pop_int()
+        ref = self.heap.alloc(n, self)
+        self.push(ref)
+
+    def op_getf(self, args):
+        i = self.pop_int()
+        s = self.pop_ref()
+        if not (i >= 0 and i < len(s.items)):
+            raise VMError('индекс вне границ')
+        self.push(s.items[i])
+
+    def op_setf(self, args):
+        v = self.pop()
+        i = self.pop_int()
+        s = self.pop_ref()
+        if not (i >= 0 and i < len(s.items)):
+            raise VMError('индекс вне границ')
+        s.items[i] = v
+
+    def op_len(self, args):
+        s = self.pop_ref()
+        l = len(s.items)
+        self.push(l)
+
+    def op_meminfo(self, args):
+        k = args[0]
+        h = self.heap
+        if k == 0:
+            self.push(h.gc_count)   
+        elif k == 1:
+            self.push(h.used)       
+        elif k == 2:
+            self.push(h.peak)       
+        elif k == 3:
+            self.push(h.capacity)    
+        else:
+            raise VMError(f'неизвестный код MEMINFO {k}')
+
+    def op_pix(self, args):
+        c = self.pop_int()  
+        y = self.pop_int()  
+        x = self.pop_int() 
+        if not (0 <= x < 32 and 0 <= y < 32):
+            raise VMError('пиксель вне экрана')
+        if not (0 <= c <= 7):
+            raise VMError('цвет вне палитры')
+        self.screen[y][x] = c
 
     # ── ГЛАВА 6: корни ──────────────────────────────────────────────────
     def roots(self):
