@@ -605,12 +605,45 @@ class VM:
             raise VMError(f'глобальной {i} не существует')
         self.push(self.globals[i])
 
-    def op_store(self, args):
+    def op_gstore(self, args):
         i = args[0]
         if i >= len(self.globals):
             raise VMError(f'глобальной {i} не существует')
         v = self.pop()
         self.globals[i] = v
+    
+    def op_jmp(self, args):
+        self.pc = args[0]
+
+    def op_jz(self, args):
+        v = self.pop_int()
+        if v == 0:
+            self.pc = args[0]
+
+    def op_jnz(self, args):
+        v = self.pop_int()
+        if v != 0:
+            self.pc = args[0]
+
+    def op_halt(self, args):
+        self.halted = True 
+
+    def op_print(self, args):
+        v = self.pop_int()
+        self.write(str(v)) 
+
+    def op_printc(self, args):
+        v = self.pop_int()
+        self.write(chr(v))
+
+    def op_prints(self, args):
+        self.write(self.cart.consts[args[0]])
+
+    def op_assert(self, args):
+        v = self.pop_int()
+        if v == 0:
+            k = args[0]
+            raise VMError(f'ASSERT {k}: тест не пройден')
 
     # ── ГЛАВА 6: корни ──────────────────────────────────────────────────
     def roots(self):
