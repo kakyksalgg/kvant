@@ -335,6 +335,12 @@ class Heap:
         """
         if not (1 <= n <= 4096):
             raise VMError('недопустимый размер массива')
+    
+        if not self.no_limit and self.used + (n + 1) > self.capacity:
+            self.collect(vm)
+            if self.used + (n + 1) > self.capacity:
+                raise VMError('OUT OF MEMORY')
+    
         v = HeapObject(n, fill)
         self.objects.append(v)
         self.used += n + 1
@@ -343,18 +349,35 @@ class Heap:
             self.peak = self.used
         self.log.append((vm.steps, self.used, 'alloc'))
         return v
-        # TODO 6.3  Перед создание м: если не no_limit и used + (n+1) > capacity —
-        #           self.collect(vm); если места всё равно нет — VMError('OUT OF MEMORY').
 
     def collect(self, vm):
         """Сборка мусора «пометка и очистка» (mark & sweep). Глава 6."""
-        # TODO 6.2  1) gc_count += 1, запись в log (vm.steps, used, 'gc_before')
-        #           2) пометка: обойти всё достижимое из vm.roots()
-        #              (без рекурсии Python — используйте список-«очередь дел»)
-        #           3) очистка: непомеченные -> alive = False, вернуть их слоты,
-        #              помеченным снять пометку
-        #           4) запись в log (vm.steps, used, 'gc_after')
-        raise NotImplementedError('Глава 6: Heap.collect')
+        self.gc_count += 1
+        self.log.append((vm.steps, self.used, 'gc_before'))
+
+        #обход содержимого
+        todo = [v for v in vm.roots() if isinstance(v, HeapObject)]
+        while todo:
+            obj = todo.pop()
+            if obj.marked:
+                continue            
+            obj.marked = True
+            for item in obj.items:
+                if isinstance(item, HeapObject) and not item.marked:
+                    todo.append(item)
+
+    #очистка
+        surv = []
+        for obj in self.objects:
+            if obj.marked:
+                obj.marked = False 
+                surv.append(obj)
+            else:
+                obj.alive = False  
+                self.used -= len(obj.items) + 1
+                self.freed += 1
+        self.objects = surv
+        self.log.append((vm.steps, self.used, 'gc_after'))
 
 
 # ════════════════════════════════════════════════════════════════════════
@@ -487,10 +510,12 @@ class VM:
         return v
 
     def pop_ref(self) -> HeapObject:
-        """Снять ССЫЛКУ на живой объект. Число — 'ожидалась ссылка';
-        освобождённый объект — 'обращение к освобождённому объекту'."""
-        # TODO 4.3
-        raise NotImplementedError('Глава 4: VM.pop_ref')
+        v = self.pop()
+        if not isinstance(v, HeapObject):
+            raise VMError('ожидалась ссылка')
+        if not v.alive:
+            raise VMError('обращение к освобождённому объекту')
+        return v
 
     # ── ГЛАВА 3: главный цикл ───────────────────────────────────────────
     def step(self):
@@ -530,12 +555,6 @@ class VM:
 
     def op_push(self, args):
         self.push(args[0])
-
-    def op_prints(self, args):
-        self.write(self.cart.consts[args[0]])
-
-    def op_halt(self, args):
-        self.halted = True
 
     # TODO 3.5  Напишите остальные обработчики. Имена: op_pop, op_dup, op_swap,
     #   op_add, op_sub, op_mul, op_div, op_mod, op_neg, op_eq, op_lt, op_gt, op_not,
@@ -702,12 +721,6 @@ class VM:
         self.frames.pop()
         self.pc = f.ret
         self.push(v)
-    
-    def pop_ref(self) -> HeapObject:
-        v = self.pop()
-        if not isinstance(v, HeapObject):
-            raise VMError('ожидалась ссылка')
-        return v
 
     def op_new(self, args):
         n = self.pop_int()
@@ -762,8 +775,10 @@ class VM:
     def roots(self):
         """Все значения, с которых сборщик начинает обход:
         стек операндов, локальные ВСЕХ кадров, глобальные."""
-        # TODO 6.1  Удобно сделать генератором:  yield from self.stack  и т. д.
-        raise NotImplementedError('Глава 6: VM.roots')
+        yield from self.stack
+        for frame in self.frames:
+            yield from frame.locals
+        yield from self.globals
 
 
 def _short(v):
@@ -801,8 +816,35 @@ def save_png(screen, path, scale=10):
 
 def plot_heap(log, capacity, path):
     """График занятости кучи (глава 6). По горизонтали — номер команды, по вертикали — used."""
-    # TODO 6.4  matplotlib: точки из log, линия ёмкости (axhline), моменты сборок.
-    print('(график кучи ещё не написан — глава 6)')
+    import matplotlib
+    matplotlib.use('Agg')          #не открывать окно
+    import matplotlib.pyplot as plt
+
+    xs, ys = [], []
+    gc_xs = []
+    for steps, used, event in log:
+        xs.append(steps)
+        ys.append(used)
+        if event == 'gc_before':
+            gc_xs.append(steps)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(xs, ys, linewidth=1, color='steelblue', label='занято слотов')
+    ax.axhline(capacity, color='red', linestyle='--', label=f'ёмкость = {capacity}')
+
+    for x in gc_xs:
+        ax.axvline(x, color='orange', alpha=0.4, linewidth=0.8)
+
+    ax.set_xlabel('номер команды (steps)')
+    ax.set_ylabel('занято слотов')
+    ax.set_title('Занятость кучи во времени')
+    ax.legend(loc='upper left')
+    ax.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+    print(f'График сохранён: {path}')
 
 
 BENCH_EXPECTED = 'БЕНЧМАРК: КОЛЛАЦ, N = 5000\nЛУЧШЕЕ n = 3711, ДЛИНА = 237\nСУММА ДЛИН = 387940\n'
