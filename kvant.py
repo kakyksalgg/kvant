@@ -154,9 +154,10 @@ OPCODES = {
     0x38: ('PRINT', ''),   0x39: ('PRINTC', ''), 0x3A: ('PRINTS', 'w'),
     0x3B: ('PIX', ''),     0x3C: ('ASSERT', 'w'),
     0x40: ('X1', ''),      0x41: ('X2', ''),     0x42: ('X3', ''),
+    0x24: ('INC', 's'),
 }
 
-OPERAND_SIZE = {'i': 4, 'b': 1, 'w': 2, 'a': 2}
+OPERAND_SIZE = {'i': 4, 'b': 1, 'w': 2, 'a': 2, 's' : 1}
 
 
 def decode(code: bytes, pc: int):
@@ -645,6 +646,12 @@ class VM:
             raise VMError(f'локальной {i} не существует')
         v = self.pop()
         self.frame.locals[i] = v
+
+    def op_inc(self, args):
+        i = args[0]
+        if i > 15:
+            raise VMError(f'локальной {i} не существует')
+        self.frame.locals[i] += 1
 
     def op_gload(self, args):
         i = args[0]
